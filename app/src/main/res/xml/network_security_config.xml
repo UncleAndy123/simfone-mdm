@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  SimFone MDM network security config.
+  ISRG Root X1 (Let's Encrypt) is bundled because Android 7.0 does not trust it
+  (7.1.1+ does). GlobalSign R46 is bundled as in upstream Headwind.
+  User CAs stay trusted so certificates installed by the MDM (CertInstaller) work.
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system"/>
             <certificates src="user"/>
+            <certificates src="@raw/isrg_root_x1"/>
+            <certificates src="@raw/globalsign_r46"/>
         </trust-anchors>
     </base-config>
 </network-security-config>

@@ -17,177 +17,149 @@
  * limitations under the License.
  */
 
-buildscript {
-    repositories {
-        jcenter()
-    }
-}
 apply plugin: 'com.android.application'
 
 repositories {
-    jcenter()
+    google()
     mavenCentral()
 }
+
+// Optional release signing: put these in ~/.gradle/gradle.properties (never commit them)
+//   SIMFONE_KEYSTORE=/path/to/simfone-release.jks
+//   SIMFONE_KEYSTORE_PASSWORD=...
+//   SIMFONE_KEY_ALIAS=simfone
+//   SIMFONE_KEY_PASSWORD=...
+def hasReleaseKey = project.hasProperty('SIMFONE_KEYSTORE')
 
 android {
     compileSdkVersion 34
     defaultConfig {
-        applicationId "com.hmdm.launcher"
-        //minSdkVersion 16
-        // Starting with version 6.33, we use newer version of com.fasterxml.jackson
-        // which is only compatible with API 26 (Android 8+).
-        // To avoid failures after the upgrade, the minimal SDK version increased here.
-        // If it is required to maintain the backward compatibility with Android 5-7,
-        // downgrade the dependency to com.fasterxml.jackson to 2.13.5
-        minSdkVersion 26
+        applicationId "com.simfone.mdm"
+        // Android 7.0+. Jackson is pinned to 2.11.4 below, which is the last
+        // line that runs on API 24/25 (newer Jackson needs MethodHandles, API 26+).
+        minSdkVersion 24
         targetSdkVersion 34
-        versionCode 16411
-        versionName "6.41.1"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        dataBinding {
-            enabled = true
-        }
+        versionCode 100
+        versionName "1.0.0"
         buildFeatures {
             aidl true
             buildConfig = true
         }
-        namespace 'com.hmdm.launcher'
-        multiDexEnabled true
+        namespace 'com.simfone.mdm'
+        // Hidden settings code: *#*#7463#*#* (S-I-M-F)
+        manifestPlaceholders = [secretCode: "7463"]
 
-        // Default URL of the web panel (scheme + host!)
-        buildConfigField("String", "BASE_URL", "\"https://app.h-mdm.com\"")
-        // URL of the secondary address of your web panel, called when the primary host is not available.
-        // Could be equal to the BASE_URL parameter
-        buildConfigField("String", "SECONDARY_BASE_URL", "\"https://app.h-mdm.com\"")
+        // Default URL of the web panel (scheme + host!). Overridden by the QR code (com.hmdm.BASE_URL).
+        buildConfigField("String", "BASE_URL", "\"https://mdm.simfone.example\"")
+        // Secondary address of the web panel, called when the primary host is not available.
+        buildConfigField("String", "SECONDARY_BASE_URL", "\"https://mdm.simfone.example\"")
         // Relative path of the web panel on the server. Keep it empty if installed in the root
         buildConfigField("String", "SERVER_PROJECT", "\"\"")
-        // This parameter manages how the device ID should be set up at first start
-        // "user" - user enters it manually
-        // "suggest" - user can select among few predefined values (IMEI, serial, MAC)
-        // "imei", "serial", "mac" - set the selected parameter as device ID without user interaction
-        buildConfigField("String", "DEVICE_ID_CHOICE", "\"user\"")
-        // Configuration key from the enrollment JSON (String)
+        // Headless: the device ID is never typed in. "serial", "imei" or "mac".
+        buildConfigField("String", "DEVICE_ID_CHOICE", "\"serial\"")
         buildConfigField("String", "ENROLLMENT_CONFIG_KEY", "null")
-        // ID of the customer enrolling devices (in multi-tenant setup only)
         buildConfigField("String", "ENROLLMENT_CUSTOMER", "null")
-        // Device group IDs (optional, comma-separated ids)
         buildConfigField("String", "ENROLLMENT_GROUPS", "null")
         // MQTT port for Push notifications
         buildConfigField("Integer", "MQTT_PORT", "31000")
-        // Set this parameter to true if you'll grant system privileges to Headwind MDM (signing it by system keys).
-        // This will enable silent installation and the launcher will try to get the device owner rights by updating system files.
-        // This may be useful, for example, when your device doesn't have QR code provisioning capability.
         buildConfigField("Boolean", "SYSTEM_PRIVILEGES", "false")
-        // If set to true, Headwind MDM prompts the user to reboot a device if failed to set the
-        // device owner. This could be used together with the SYSTEM_PRIVILEGES option
-        buildConfigField("Boolean", "REBOOT_ON_DEVICE_OWNER_FAIL", "false")
-        // Set this parameter to true if you'd like to trust every certificate, for example, self-signed
-        // Not recommended for security purposes!
         buildConfigField("Boolean", "TRUST_ANY_CERTIFICATE", "false")
-        // A shared secret to sign server config requests and MQTT (Push) messages
-        buildConfigField("String", "REQUEST_SIGNATURE", "\"changeme-C3z9vi54\"")
-        // Set this parameter to true if the server signature should be checked
-        // (additional protection against Man-In-The-Middle attacks)
+        // Shared secret to sign server config requests and MQTT messages. MUST match the server.
+        // Override with -PSIMFONE_REQUEST_SIGNATURE=... (or gradle.properties) for release builds.
+        buildConfigField("String", "REQUEST_SIGNATURE", "\"" + (project.findProperty('SIMFONE_REQUEST_SIGNATURE') ?: "simfone-CHANGE-ME-req") + "\"")
+        // Check the server signature (protection against MITM)
         buildConfigField("Boolean", "CHECK_SIGNATURE", "false")
-        // ANR watchdog flag (for testing purposes only as this watchdog may drain the resources!)
-        buildConfigField("Boolean", "ANR_WATCHDOG", "false")
-        // If set to true, the server URL will be requested in UI in non-MDM mode even if it is hardcoded in build.gradle
-        // See the related "if" statement in MainActivity.java
-        buildConfigField("Boolean", "REQUEST_SERVER_URL", "true")
-        // Set to true to debug admin receiver via remote logging
-        buildConfigField("Boolean", "DEVICE_ADMIN_DEBUG", "false")
-        // Set to true to enable kiosk mode even if the app can't draw over other windows
-        // This may be required for weak devices where drawing over other windows is disabled by OS
-        buildConfigField("Boolean", "ENABLE_KIOSK_WITHOUT_OVERLAYS", "false")
         // Foreground service for MQTT: prevents OS from killing MQTT service on weak devices
         buildConfigField("Boolean", "MQTT_SERVICE_FOREGROUND", "true")
-        // Set Headwind MDM to default launcher at early time of the first start
-        // to prevent the user from clicking Home and stop initializing Headwind MDM
-        buildConfigField("Boolean", "SET_DEFAULT_LAUNCHER_EARLY", "false")
-        // Adjust application selection on TV boxes
-        buildConfigField("Boolean", "SELECTED_ITEM_BY_CLICK", "false")
-        // Adjust application selection on TV boxes
-        buildConfigField("Boolean", "DISABLE_ORIENTATION_LOCK", "false")
-        // API key for the authorization of privileged library requests
-        buildConfigField("String", "LIBRARY_API_KEY", "\"changeme-8gzk321W\"")
-        // Use accessibility services to control unwanted apps
-        // (this option is banned by Play Protect in some countries!)
-        buildConfigField("Boolean", "USE_ACCESSIBILITY", "false")
+        // API key for privileged hmdm-lib requests (launcher, KyCall, dpadsms). MUST match the companions.
+        buildConfigField("String", "LIBRARY_API_KEY", "\"" + (project.findProperty('SIMFONE_LIBRARY_API_KEY') ?: "simfone-CHANGE-ME-lib") + "\"")
+        // ECDSA P-256 public key (X.509 SubjectPublicKeyInfo, base64) that signs the fallback manifest.
+        buildConfigField("String", "FALLBACK_MANIFEST_PUBLIC_KEY", "\"" + (project.findProperty('SIMFONE_MANIFEST_PUBKEY') ?: "") + "\"")
+        // URL of the signed fallback manifest on a second provider (empty = disabled)
+        buildConfigField("String", "FALLBACK_MANIFEST_URL", "\"" + (project.findProperty('SIMFONE_MANIFEST_URL') ?: "") + "\"")
+        // Days the primary server must be unreachable (with working internet) before the manifest is checked
+        buildConfigField("Integer", "FALLBACK_MANIFEST_AFTER_DAYS", "3")
     }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(SIMFONE_KEYSTORE)
+                storePassword SIMFONE_KEYSTORE_PASSWORD
+                keyAlias SIMFONE_KEY_ALIAS
+                keyPassword SIMFONE_KEY_PASSWORD
+            }
+        }
+    }
+
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             debuggable false
+            if (hasReleaseKey) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
     }
 
     packagingOptions {
-        exclude 'META-INF/DEPENDENCIES.txt'
-        exclude 'META-INF/LICENSE.txt'
-        exclude 'META-INF/NOTICE.txt'
-        exclude 'META-INF/NOTICE'
-        exclude 'META-INF/NOTICE.md'
-        exclude 'META-INF/LICENSE'
-        exclude 'META-INF/LICENSE.md'
-        exclude 'META-INF/DEPENDENCIES'
-        exclude 'META-INF/notice.txt'
-        exclude 'META-INF/license.txt'
-        exclude 'META-INF/dependencies.txt'
-        exclude 'META-INF/LGPL2.1'
+        resources {
+            excludes += ['META-INF/DEPENDENCIES*', 'META-INF/LICENSE*', 'META-INF/NOTICE*',
+                         'META-INF/notice.txt', 'META-INF/license.txt', 'META-INF/dependencies.txt',
+                         'META-INF/LGPL2.1', 'META-INF/*.kotlin_module', 'META-INF/versions/**']
+        }
     }
 
-    flavorDimensions "all"
-
-    productFlavors {
-        opensource { }
+    // Jackson 2.12+ uses java.lang.invoke APIs that crash on Android 7 (API 24/25).
+    configurations.all {
+        resolutionStrategy {
+            force 'com.fasterxml.jackson.core:jackson-databind:2.11.4'
+            force 'com.fasterxml.jackson.core:jackson-core:2.11.4'
+            force 'com.fasterxml.jackson.core:jackson-annotations:2.11.4'
+        }
     }
 }
 
 dependencies {
-    implementation fileTree(include: ['*.jar'], dir: 'libs')
-    androidTestImplementation('androidx.test.espresso:espresso-core:3.1.0', {
-        exclude group: 'com.android.support', module: 'support-annotations'
-    })
-    implementation 'androidx.appcompat:appcompat:1.1.0'
-    testImplementation 'junit:junit:4.12'
-    implementation 'androidx.recyclerview:recyclerview:1.1.0'
-    implementation 'com.google.android.material:material:1.1.0'
-    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.0.0'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
 
     // MQTT messaging
     implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.0'
 
-    // Picassomk
-    implementation 'com.squareup.picasso:picasso:2.5.2'
-    implementation 'com.jakewharton.picasso:picasso2-okhttp3-downloader:1.1.0'
-
     // Retrofit
-    implementation 'com.squareup.retrofit2:retrofit:3.0.0'
-    implementation 'com.squareup.retrofit2:converter-jackson:3.0.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+    implementation 'com.squareup.retrofit2:converter-jackson:2.11.0'
 
-    // Jackson
-    implementation 'com.fasterxml.jackson.core:jackson-core:2.21.1'
-    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.21'
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.1'
+    // Jackson (pinned, see above)
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.11.4'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.11.4'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.11.4'
 
     // Worker
     implementation 'androidx.work:work-runtime:2.9.1'
 
-    implementation('com.journeyapps:zxing-android-embedded:4.1.0') { transitive = false }
-    implementation 'com.google.zxing:core:3.3.0'
-    implementation group: 'commons-io', name: 'commons-io', version: '2.0.1'
+    implementation 'commons-io:commons-io:2.0.1'
 
-    // JAX-B dependencies for JDK 9+
-    implementation "jakarta.xml.bind:jakarta.xml.bind-api:2.3.2"
-    implementation "org.glassfish.jaxb:jaxb-runtime:2.3.2"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20231013'
 }

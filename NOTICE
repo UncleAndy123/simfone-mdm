@@ -8,3 +8,10 @@ Headwind MDM: Open Source Android Mobile Device Management Software
 Project website: https://h-mdm.com
 
 (c) 2019 Headwind Solutions LLC (http://www.h-sms.com)
+
+-------------------------------------------------------------------------
+SimFone MDM is a modified version of Headwind MDM (hmdm-android).
+Modifications (c) 2026 SimFone: headless Device Owner agent, policy ledger,
+release/park without factory reset, fail-closed policy handling, D-pad hidden
+settings. Agent pieces ported from the Pure-speech-hmdm-android fork.
+-------------------------------------------------------------------------

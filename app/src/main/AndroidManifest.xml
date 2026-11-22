@@ -18,16 +18,18 @@
   ~ limitations under the License.
   -->
 
-<!-- -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:sharedUserId="com.hmdm">
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Sent with ReleaseManager.ACTION_RELEASED / ACTION_PARKED. Companions (KyCall, dpadsms,
+         launcher) protect their receivers with this permission so only SimFone can send them. -->
+    <permission
+        android:name="com.simfone.mdm.permission.RELEASE_BROADCAST"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.simfone.mdm.permission.RELEASE_BROADCAST" />
+
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
 <!-- This permission is dangerous and causes blocking by Play Protect in some countries.
@@ -37,16 +39,10 @@
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS"/>
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
         tools:ignore="ProtectedPermissions"/>
-    <uses-permission android:name="android.permission.GET_TASKS"/>
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
-                     tools:ignore="ProtectedPermissions"/>
-    <uses-permission android:name="android.permission.INJECT_EVENTS"
-        tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
     <uses-permission android:name="android.permission.BLUETOOTH" android:required="false" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:required="false" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" android:required="false"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
@@ -65,7 +61,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.REQUEST_PASSWORD_COMPLEXITY" />
     <uses-permission android:name="android.permission.MASTER_CLEAR"
         tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.WRITE_SETTINGS"
@@ -82,7 +77,6 @@
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_DEBUGGING_FEATURES" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_DISPLAY" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_FACTORY_RESET" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_FUN" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_INSTALL_UNKNOWN_SOURCES" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_LOCALE" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_LOCATION" />
@@ -104,64 +98,48 @@
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_TIME" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_USB_FILE_TRANSFER" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_VPN" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WALLPAPER" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WIFI" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WINDOWS" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WIPE_DATA" />
 
-    <uses-sdk tools:overrideLibrary="com.google.zxing.client.android" />
-
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- Headless agent: no HOME/LAUNCHER intent filters and no app-drawer icon. -->
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/white_app_name"
+        android:label="@string/app_name"
         android:supportsRtl="true"
+        android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme"
         android:name=".App"
-        android:hardwareAccelerated="true"
         tools:ignore="GoogleAppIndexingWarning">
 
+        <!-- Hidden D-pad settings: dialer code *#*#${secretCode}#*#* -->
         <activity
-            android:name=".ui.MainActivity"
-            android:launchMode="singleInstance"
-            android:banner="@drawable/banner"
+            android:name=".ui.SettingsActivity"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme"
+            android:exported="false" />
+
+        <!-- Android 10+ QR provisioning (admin-integrated flow), both headless -->
+        <activity
+            android:name=".ui.ProvisioningModeActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL"/>
-
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.HOME" />
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>
-        <activity 
-            android:name=".ui.AdminActivity"
-            android:excludeFromRecents="true" 
-            android:exported="false"
-        />
         <activity
-            android:name=".ui.AdminModeRequestActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            />
-
-        <activity
-            android:name="com.journeyapps.barcodescanner.CaptureActivity"
-            android:screenOrientation="fullSensor"
-            tools:replace="screenOrientation" 
-            android:exported="false"/>
-
-        <activity
-            android:name=".ui.InitialSetupActivity"
-            android:theme="@style/SetupWizardTheme"
+            android:name=".ui.PolicyComplianceActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
             android:exported="true">
             <intent-filter>
@@ -170,63 +148,64 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".ui.MdmChoiceSetupActivity"
-            android:theme="@style/SetupWizardTheme"
-            android:permission="android.permission.BIND_DEVICE_ADMIN"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
-                <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name=".ui.ErrorDetailsActivity"
-            android:theme="@style/SetupWizardTheme" 
-            android:exported="false"/>
-
         <receiver
-            android:name="com.hmdm.launcher.AdminReceiver"
-            android:label="@string/white_app_name"
+            android:name="com.simfone.mdm.AdminReceiver"
+            android:label="@string/app_name"
             android:exported="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/device_admin" />
-
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
             </intent-filter>
         </receiver>
 
-        <receiver android:name="com.hmdm.launcher.receiver.SimChangedReceiver"
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receiver.SecretCodeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE" />
+                <data android:scheme="android_secret_code" android:host="${secretCode}" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Offline release key from the provisioning computer. DUMP = shell/system only. -->
+        <receiver
+            android:name=".receiver.ReleaseKeyReceiver"
+            android:permission="android.permission.DUMP"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.simfone.mdm.SET_RELEASE_KEY" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".receiver.SimChangedReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SIM_STATE_CHANGED"/>
             </intent-filter>
         </receiver>
 
-        <receiver android:name="com.hmdm.launcher.receiver.ShutdownReceiver"
+        <receiver android:name=".receiver.ShutdownReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.ACTION_SHUTDOWN" />
                 <action android:name="android.intent.action.QUICKBOOT_POWEROFF" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name="com.hmdm.launcher.receiver.BootReceiver"
-            android:label="BootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
-                <!--For HTC devices-->
-                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
 
@@ -240,18 +219,12 @@
                 android:resource="@xml/provider_paths"/>
         </provider>
 
-        <service android:name=".pro.service.CheckForegroundApplicationService"
-            android:exported="true"/>
-
+        <!-- Companion-app policy API (hmdm-lib AIDL) for the launcher, KyCall and dpadsms -->
         <service android:name=".service.PluginApiService" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="com.hmdm.action.Connect" />
             </intent-filter>
         </service>
-
-        <!-- Stub -->
-        <service android:name=".pro.service.CheckForegroundAppAccessibilityService"
-                 android:exported="false"/>
 
         <service android:name="org.eclipse.paho.android.service.MqttService"
             android:foregroundServiceType="specialUse|systemExempted"
@@ -262,9 +235,6 @@
 
         <service android:name=".service.LocationService"
             android:foregroundServiceType="location"
-            android:exported="false"/>
-
-        <service android:name=".service.StatusControlService"
             android:exported="false"/>
 
         <service android:name=".service.PushLongPollingService"

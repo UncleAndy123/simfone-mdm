@@ -21,9 +21,9 @@ package com.hmdm;
 
 class Const {
     static final String SERVICE_ACTION = "com.hmdm.action.Connect";
-    static final String PACKAGE = "com.hmdm.launcher";
+    static final String PACKAGE = "com.simfone.mdm";
     static final String LEGACY_PACKAGE = "ru.headwind.kiosk";
-    static final String ADMIN_RECEIVER_CLASS = "com.hmdm.launcher.AdminReceiver";
+    static final String ADMIN_RECEIVER_CLASS = "com.simfone.mdm.AdminReceiver";
 
     public static final String INTENT_PUSH_NOTIFICATION_PREFIX = "com.hmdm.push.";
     public static final String INTENT_PUSH_NOTIFICATION_EXTRA = "com.hmdm.PUSH_DATA";

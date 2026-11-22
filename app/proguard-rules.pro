@@ -1,19 +1,35 @@
-# Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# in C:\Android\sdk/tools/proguard/proguard-android.txt
-# You can edit the include path and order by changing the proguardFiles
-# directive in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# SimFone MDM R8 rules
 
-# Add any project specific keep options here:
+# Jackson-mapped server models (reflection on fields/getters/setters)
+-keep class com.simfone.mdm.json.** { *; }
+-keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses, Exceptions
+-keepnames class com.fasterxml.jackson.** { *; }
+-dontwarn com.fasterxml.jackson.databind.**
+-keep class com.fasterxml.jackson.annotation.** { *; }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
--keep class !ru.headwind.kiosk.**{ *; }
--keep class ru.headwind.kiosk.sdk.UpdateError {*;}
+# Retrofit service interfaces
+-keep interface com.simfone.mdm.server.ServerService { *; }
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+-dontwarn retrofit2.**
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+
+# MQTT (Paho loads its network modules and logger by class name)
+-keep class org.eclipse.paho.client.mqttv3.** { *; }
+-keep class org.eclipse.paho.android.service.** { *; }
+-dontwarn org.eclipse.paho.**
+
+# AIDL companion API (hmdm-lib clients bind by name)
+-keep class com.hmdm.** { *; }
+
+# Workers are instantiated by class name
+-keep class * extends androidx.work.ListenableWorker { <init>(...); }
+
+-dontwarn java.beans.**
+-dontwarn org.w3c.dom.bootstrap.**

@@ -3,8 +3,8 @@ package org.eclipse.paho.android.service;
 import android.content.Context;
 import android.util.Log;
 
-import com.hmdm.launcher.Const;
-import com.hmdm.launcher.util.RemoteLogger;
+import com.simfone.mdm.Const;
+import com.simfone.mdm.util.RemoteLogger;
 
 public class PingDeathDetector {
     private static PingDeathDetector instance;
