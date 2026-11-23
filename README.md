@@ -3,6 +3,9 @@
 A headless Android Device Owner agent for SimFone phones (Android 7.0+ / API 24), built on
 [Headwind MDM](https://github.com/h-mdm/hmdm-android) (Apache-2.0, see `LICENSE` and `NOTICE`).
 
+Why this is being built: Originally I had been working with Headwind, but finally have concluded that it is too heavyweight, and having a launcher integrated with the MDM is practically useless for my purposes.
+So instead of working off of my other fork of Headwind, this is a fresh fork, and will be designed to work with our Odoo module and provide basic MDM features when a user signs up at simfone.org.
+
 - **No home screen.** The separate SimFone launcher is a normal HOME app. SimFone MDM has no
   launcher icon and no resident UI.
 - Silent install / update / remove, hide, suspend and protect apps, user restrictions, APN override.
