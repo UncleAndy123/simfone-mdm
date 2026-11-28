@@ -46,6 +46,24 @@ Also set `BASE_URL` / `SECONDARY_BASE_URL` in `app/build.gradle` to your server.
 
 Release build: R8 + resource shrinking, about 1.8 MB.
 
+### Automated releases (GitHub Actions)
+
+Push a tag; `.github/workflows/release.yml` tests, builds, signs and publishes a GitHub Release
+with the APK, `SHA256SUMS` and the QR signature checksum.
+
+```bash
+git tag v0.1.0-exp.2 && git push origin v0.1.0-exp.2
+```
+
+- `v1.2.3` = stable, `v1.2.3-exp.N` / `-beta.N` / `-rc.N` = pre-release (N = 1–98).
+- versionCode = `(MAJOR*10000 + MINOR*100 + PATCH) * 100 + N` (99 for stable), so it always grows.
+- Secrets: `SIMFONE_KEYSTORE_B64` (`base64 -w0 simfone-release.jks`), `SIMFONE_KEYSTORE_PASSWORD`,
+  `SIMFONE_KEY_ALIAS`, `SIMFONE_KEY_PASSWORD`, `SIMFONE_REQUEST_SIGNATURE`,
+  `SIMFONE_LIBRARY_API_KEY`, optional `SIMFONE_MANIFEST_PUBKEY`, `SIMFONE_MANIFEST_URL`.
+- Without the keystore secret, pre-releases are signed with a throwaway key and marked
+  **NOT FOR FLEET** (a phone running one can't be updated by a release-signed build);
+  stable tags fail.
+
 ### hmdm-lib (companion apps)
 
 `lib/` is the AIDL client library used by the launcher, KyCall and dpadsms. It now targets

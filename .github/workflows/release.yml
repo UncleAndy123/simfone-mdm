@@ -1,0 +1,156 @@
+# SimFone MDM automated release.
+#
+# Push a tag to release:
+#   v1.2.3          -> stable release
+#   v1.2.3-exp.4    -> experimental pre-release (also -beta.N, -rc.N)
+#
+# versionCode = (MAJOR*10000 + MINOR*100 + PATCH) * 100 + N, where N is the pre-release
+# number (1-98) or 99 for a stable release. It always grows, so Device Owner self-updates work.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   SIMFONE_KEYSTORE_B64       base64 of the release .jks      (required for stable releases)
+#   SIMFONE_KEYSTORE_PASSWORD, SIMFONE_KEY_ALIAS, SIMFONE_KEY_PASSWORD
+#   SIMFONE_REQUEST_SIGNATURE  server hash.secret
+#   SIMFONE_LIBRARY_API_KEY    shared with launcher / KyCall / dpadsms
+#   SIMFONE_MANIFEST_PUBKEY    fallback manifest public key (optional)
+#   SIMFONE_MANIFEST_URL       fallback manifest URL (optional)
+# Without the keystore secret, a pre-release is signed with a throwaway key and marked
+# "NOT FOR FLEET" (it can never be updated by a release-signed build). Stable releases fail.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v0.1.0-exp.2); created if missing'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Version from tag
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-([a-z]+)\.([0-9]+))?$ ]]; then
+            echo "::error::Tag $TAG must look like v1.2.3 or v1.2.3-exp.4"; exit 1
+          fi
+          M=${BASH_REMATCH[1]}; m=${BASH_REMATCH[2]}; p=${BASH_REMATCH[3]}; n=${BASH_REMATCH[6]:-}
+          if [[ -n "$n" ]]; then
+            (( n >= 1 && n <= 98 )) || { echo "::error::pre-release number must be 1-98"; exit 1; }
+            echo "PRERELEASE=true" >> "$GITHUB_ENV"
+          else
+            n=99; echo "PRERELEASE=false" >> "$GITHUB_ENV"
+          fi
+          (( m < 100 && p < 100 )) || { echo "::error::minor/patch must be < 100"; exit 1; }
+          echo "SIMFONE_VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SIMFONE_VERSION_CODE=$(( (M*10000 + m*100 + p) * 100 + n ))" >> "$GITHUB_ENV"
+
+      - name: Build secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.SIMFONE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SIMFONE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIMFONE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIMFONE_KEY_PASSWORD }}
+          REQUEST_SIGNATURE: ${{ secrets.SIMFONE_REQUEST_SIGNATURE }}
+          LIBRARY_API_KEY: ${{ secrets.SIMFONE_LIBRARY_API_KEY }}
+          MANIFEST_PUBKEY: ${{ secrets.SIMFONE_MANIFEST_PUBKEY }}
+          MANIFEST_URL: ${{ secrets.SIMFONE_MANIFEST_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.gradle
+          props=~/.gradle/gradle.properties
+          : > "$props"
+          [[ -n "$REQUEST_SIGNATURE" ]] && echo "SIMFONE_REQUEST_SIGNATURE=$REQUEST_SIGNATURE" >> "$props"
+          [[ -n "$LIBRARY_API_KEY" ]] && echo "SIMFONE_LIBRARY_API_KEY=$LIBRARY_API_KEY" >> "$props"
+          [[ -n "$MANIFEST_PUBKEY" ]] && echo "SIMFONE_MANIFEST_PUBKEY=$MANIFEST_PUBKEY" >> "$props"
+          [[ -n "$MANIFEST_URL" ]] && echo "SIMFONE_MANIFEST_URL=$MANIFEST_URL" >> "$props"
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "SIMFONE_KEYSTORE=$RUNNER_TEMP/release.jks"
+              echo "SIMFONE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "SIMFONE_KEY_ALIAS=$KEY_ALIAS"
+              echo "SIMFONE_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$props"
+            echo "SIGNING=release" >> "$GITHUB_ENV"
+          elif [[ "$PRERELEASE" == "true" ]]; then
+            echo "::warning::No release keystore secret: pre-release is signed with a throwaway key (NOT FOR FLEET)"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/throwaway.jks" -storepass throwaway -keypass throwaway \
+              -alias throwaway -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=SimFone experimental" >/dev/null
+            {
+              echo "SIMFONE_KEYSTORE=$RUNNER_TEMP/throwaway.jks"
+              echo "SIMFONE_KEYSTORE_PASSWORD=throwaway"
+              echo "SIMFONE_KEY_ALIAS=throwaway"
+              echo "SIMFONE_KEY_PASSWORD=throwaway"
+            } >> "$props"
+            echo "SIGNING=throwaway" >> "$GITHUB_ENV"
+          else
+            echo "::error::Stable releases need the SIMFONE_KEYSTORE_B64 secret"; exit 1
+          fi
+          [[ -z "$REQUEST_SIGNATURE" ]] && echo "::warning::SIMFONE_REQUEST_SIGNATURE not set: built with the placeholder (won't match a real server)"
+          true
+
+      - name: Test
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Build release APK
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Collect artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APK="dist/simfone-mdm-${SIMFONE_VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          CERT_SHA=$("$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          CHECKSUM=$(python3 -c "import base64,sys;print(base64.urlsafe_b64encode(bytes.fromhex(sys.argv[1])).decode().rstrip('='))" "$CERT_SHA")
+          sha256sum "$APK" | sed 's| dist/||' > dist/SHA256SUMS
+          cat > dist/notes.md <<EOF
+          **SimFone MDM ${SIMFONE_VERSION_NAME}** (versionCode ${SIMFONE_VERSION_CODE})
+
+          Signing: **${SIGNING}**$( [[ "$SIGNING" == throwaway ]] && echo ' - experimental, NOT FOR FLEET: cannot be updated by release-signed builds.' )
+
+          QR \`PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM\`: \`${CHECKSUM}\`
+
+          Certificate SHA-256: \`${CERT_SHA}\`
+
+          Install on a test phone:
+          \`\`\`
+          adb install simfone-mdm-${SIMFONE_VERSION_NAME}.apk
+          adb shell dpm set-device-owner com.simfone.mdm/.AdminReceiver
+          \`\`\`
+          EOF
+          sed -i 's/^          //' dist/notes.md
+          cat dist/notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          flags=()
+          [[ "$PRERELEASE" == "true" ]] && flags+=(--prerelease)
+          gh release create "$TAG" dist/*.apk dist/SHA256SUMS \
+            --title "SimFone MDM ${SIMFONE_VERSION_NAME}" --notes-file dist/notes.md \
+            --target "$GITHUB_SHA" "${flags[@]}"

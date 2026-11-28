@@ -39,8 +39,10 @@ android {
         // line that runs on API 24/25 (newer Jackson needs MethodHandles, API 26+).
         minSdkVersion 24
         targetSdkVersion 34
-        versionCode 100
-        versionName "1.0.0"
+        // CI sets these from the git tag (vMAJOR.MINOR.PATCH[-suffix]).
+        // versionCode must only ever grow, or Device Owner self-updates are refused.
+        versionCode((System.getenv("SIMFONE_VERSION_CODE") ?: "100") as int)
+        versionName(System.getenv("SIMFONE_VERSION_NAME") ?: "1.0.0-dev")
         buildFeatures {
             aidl true
             buildConfig = true
