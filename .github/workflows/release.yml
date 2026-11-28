@@ -22,7 +22,7 @@ name: Release
 on:
   push:
     branches: [master]
-    paths: ['app/build.gradle']
+    paths: ['app/build.gradle', '.github/workflows/release.yml']
   workflow_dispatch:
 
 concurrency:
@@ -76,6 +76,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       # GitHub runners ship the Android SDK; just make sure our platform/build-tools are there.
       # (android-actions/setup-android@v3 fails: it installs the removed legacy "tools" package.)
@@ -133,6 +134,16 @@ jobs:
           fi
           [[ -z "$REQUEST_SIGNATURE" ]] && echo "::warning::SIMFONE_REQUEST_SIGNATURE not set: built with the placeholder (won't match a real server)"
           true
+
+      # Maven Central sometimes rate-limits shared runners (HTTP 429): retry dependency resolution
+      - name: Download dependencies
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          for i in 1 2 3; do
+            ./gradlew --no-daemon :app:dependencies --configuration releaseRuntimeClasspath > /dev/null && exit 0
+            echo "::warning::dependency download failed (attempt $i), retrying in $((i*60))s"; sleep $((i*60))
+          done
+          exit 1
 
       - name: Test
         if: steps.version.outputs.skip != 'true'
