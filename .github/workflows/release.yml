@@ -37,16 +37,24 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # GitHub runners ship the Android SDK; just make sure our platform/build-tools are there.
+      # (android-actions/setup-android@v3 fails: it installs the removed legacy "tools" package.)
+      - name: Android SDK packages
+        run: |
+          set -euo pipefail
+          SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+          echo "Using $SDKM"
 
       - name: Version from tag
         run: |
