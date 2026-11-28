@@ -1,32 +1,33 @@
 # SimFone MDM automated release.
 #
-# Push a tag to release:
-#   v1.2.3          -> stable release
-#   v1.2.3-exp.4    -> experimental pre-release (also -beta.N, -rc.N)
-#
-# versionCode = (MAJOR*10000 + MINOR*100 + PATCH) * 100 + N, where N is the pre-release
-# number (1-98) or 99 for a stable release. It always grows, so Device Owner self-updates work.
+# Bump versionCode (and versionName) in app/build.gradle and push to master:
+# this workflow tests, builds, signs and publishes GitHub release v<versionName>.
+#   - versionName with a "-" (0.2.0-exp.1, 1.0.0-rc.2) -> pre-release, otherwise a normal release
+#   - nothing happens if versionCode didn't change (or v<versionName> is already released)
+#   - fails if versionCode is not higher than the last release's (DO self-updates need it to grow)
+# "Run workflow" (manual) releases the current version if it isn't released yet.
 #
 # Repository secrets (Settings > Secrets and variables > Actions):
-#   SIMFONE_KEYSTORE_B64       base64 of the release .jks      (required for stable releases)
+#   SIMFONE_KEYSTORE_B64       base64 of the release .jks      (required for normal releases)
 #   SIMFONE_KEYSTORE_PASSWORD, SIMFONE_KEY_ALIAS, SIMFONE_KEY_PASSWORD
 #   SIMFONE_REQUEST_SIGNATURE  server hash.secret
 #   SIMFONE_LIBRARY_API_KEY    shared with launcher / KyCall / dpadsms
 #   SIMFONE_MANIFEST_PUBKEY    fallback manifest public key (optional)
 #   SIMFONE_MANIFEST_URL       fallback manifest URL (optional)
 # Without the keystore secret, a pre-release is signed with a throwaway key and marked
-# "NOT FOR FLEET" (it can never be updated by a release-signed build). Stable releases fail.
+# "NOT FOR FLEET" (it can never be updated by a release-signed build). Normal releases fail.
 
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [master]
+    paths: ['app/build.gradle']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to build and release (e.g. v0.1.0-exp.2); created if missing'
-        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -34,14 +35,44 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
+      - name: Version from app/build.gradle
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' app/build.gradle | head -1)
+          NAME=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]+"([^"]+)".*/\1/p' app/build.gradle | head -1)
+          [[ -n "$CODE" && -n "$NAME" ]] || { echo "::error::versionCode/versionName not found in app/build.gradle"; exit 1; }
+          [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::versionName $NAME must be MAJOR.MINOR.PATCH[-suffix]"; exit 1; }
+          TAG="v$NAME"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Highest versionCode already released (recorded in each release body)
+          LAST=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName --jq '.[].tagName' \
+                 | while read -r t; do gh release view "$t" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+                 | sed -nE 's/.*versionCode ([0-9]+).*/\1/p' | head -1; done | sort -n | tail -1)
+          LAST=${LAST:-0}
+          if (( CODE <= LAST )); then
+            echo "::error::versionCode $CODE is not higher than the last released versionCode $LAST. Bump it."
+            exit 1
+          fi
+          if [[ "$NAME" == *-* ]]; then echo "PRERELEASE=true" >> "$GITHUB_ENV"; else echo "PRERELEASE=false" >> "$GITHUB_ENV"; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "SIMFONE_VERSION_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "SIMFONE_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (versionCode $CODE, previous $LAST)"
+
       - uses: actions/setup-java@v5
+        if: steps.version.outputs.skip != 'true'
         with:
           distribution: temurin
           java-version: '17'
@@ -49,6 +80,7 @@ jobs:
       # GitHub runners ship the Android SDK; just make sure our platform/build-tools are there.
       # (android-actions/setup-android@v3 fails: it installs the removed legacy "tools" package.)
       - name: Android SDK packages
+        if: steps.version.outputs.skip != 'true'
         run: |
           set -euo pipefail
           SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
@@ -56,24 +88,8 @@ jobs:
           "$SDKM" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
           echo "Using $SDKM"
 
-      - name: Version from tag
-        run: |
-          set -euo pipefail
-          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-([a-z]+)\.([0-9]+))?$ ]]; then
-            echo "::error::Tag $TAG must look like v1.2.3 or v1.2.3-exp.4"; exit 1
-          fi
-          M=${BASH_REMATCH[1]}; m=${BASH_REMATCH[2]}; p=${BASH_REMATCH[3]}; n=${BASH_REMATCH[6]:-}
-          if [[ -n "$n" ]]; then
-            (( n >= 1 && n <= 98 )) || { echo "::error::pre-release number must be 1-98"; exit 1; }
-            echo "PRERELEASE=true" >> "$GITHUB_ENV"
-          else
-            n=99; echo "PRERELEASE=false" >> "$GITHUB_ENV"
-          fi
-          (( m < 100 && p < 100 )) || { echo "::error::minor/patch must be < 100"; exit 1; }
-          echo "SIMFONE_VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
-          echo "SIMFONE_VERSION_CODE=$(( (M*10000 + m*100 + p) * 100 + n ))" >> "$GITHUB_ENV"
-
       - name: Build secrets
+        if: steps.version.outputs.skip != 'true'
         env:
           KEYSTORE_B64: ${{ secrets.SIMFONE_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.SIMFONE_KEYSTORE_PASSWORD }}
@@ -119,12 +135,15 @@ jobs:
           true
 
       - name: Test
+        if: steps.version.outputs.skip != 'true'
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
       - name: Build release APK
+        if: steps.version.outputs.skip != 'true'
         run: ./gradlew --no-daemon :app:assembleRelease
 
       - name: Collect artifacts
+        if: steps.version.outputs.skip != 'true'
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -153,6 +172,7 @@ jobs:
           cat dist/notes.md
 
       - name: Publish GitHub release
+        if: steps.version.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

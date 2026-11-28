@@ -77,6 +77,7 @@ public class PolicyEnforcer {
     public static final String SETTING_UNLOCKED = "unlocked_packages";
     public static final String SETTING_PROTECTED = "protected_packages";
     public static final String SETTING_AUTO_TIME = "auto_time_required";
+    public static final String SETTING_SETUP_ICON = "settings_icon";
 
     private static final Object lock = new Object();
 
@@ -114,6 +115,7 @@ public class PolicyEnforcer {
             applyRestrictions(context, ledger, config, keepInstallWindow);
             applyPackages(context, ledger);
             applyAutoTime(context, ledger);
+            applySetupIcon(context);
             ApnPolicy.apply(context, ledger);
             try {
                 SmsFilterManager.getInstance(context).pushIfNeeded();
@@ -371,6 +373,24 @@ public class PolicyEnforcer {
             ledger.setFlag(PolicyLedger.FLAG_AUTO_TIME_REQUIRED, required);
         } catch (Exception e) {
             Log.w(TAG, "setAutoTimeRequired: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Shows or hides the "SimFone Setup" app-drawer icon. Setting settings_icon = "hide" hides it;
+     * anything else (or no setting) shows it. The dialer code works either way.
+     */
+    private static void applySetupIcon(Context context) {
+        String v = SettingsHelper.getInstance(context).getAppPreference(context.getPackageName(), SETTING_SETUP_ICON);
+        boolean show = v == null || !"hide".equalsIgnoreCase(v.trim());
+        try {
+            context.getPackageManager().setComponentEnabledSetting(
+                    new ComponentName(context, "com.simfone.mdm.ui.SetupIcon"),
+                    show ? android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                         : android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP);
+        } catch (Exception e) {
+            Log.w(TAG, "setup icon: " + e.getMessage());
         }
     }
 

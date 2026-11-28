@@ -105,7 +105,7 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- Headless agent: no HOME/LAUNCHER intent filters and no app-drawer icon. -->
+    <!-- Headless agent: no HOME intent filter. The only icon is the gated setup screen (SetupIcon). -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -125,6 +125,21 @@
             android:launchMode="singleTask"
             android:theme="@style/AppTheme"
             android:exported="false" />
+
+        <!-- App-drawer icon for the setup screen (PIN / offline-code gated).
+             Hide it per configuration with the com.simfone.mdm setting settings_icon=hide. -->
+        <activity-alias
+            android:name=".ui.SetupIcon"
+            android:targetActivity=".ui.SettingsActivity"
+            android:label="@string/setup_icon_label"
+            android:icon="@mipmap/ic_launcher"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Android 10+ QR provisioning (admin-integrated flow), both headless -->
         <activity

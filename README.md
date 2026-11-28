@@ -48,21 +48,20 @@ Release build: R8 + resource shrinking, about 1.8 MB.
 
 ### Automated releases (GitHub Actions)
 
-Push a tag; `.github/workflows/release.yml` tests, builds, signs and publishes a GitHub Release
-with the APK, `SHA256SUMS` and the QR signature checksum.
+Bump `versionCode` (and `versionName`) in `app/build.gradle` and push to `master`.
+`.github/workflows/release.yml` then tests, builds, signs and publishes GitHub release
+`v<versionName>` with the APK, `SHA256SUMS` and the QR signature checksum.
 
-```bash
-git tag v0.1.0-exp.2 && git push origin v0.1.0-exp.2
-```
-
-- `v1.2.3` = stable, `v1.2.3-exp.N` / `-beta.N` / `-rc.N` = pre-release (N = 1–98).
-- versionCode = `(MAJOR*10000 + MINOR*100 + PATCH) * 100 + N` (99 for stable), so it always grows.
+- `versionName` with a `-` (`0.2.0-exp.1`, `1.0.0-rc.2`) = pre-release; otherwise a normal release.
+- Pushes that don't change the version do nothing; a `versionCode` that isn't higher than the
+  last release's fails the run (Device Owner self-updates need it to grow).
+- Actions → Release → Run workflow releases the current version if it isn't released yet.
 - Secrets: `SIMFONE_KEYSTORE_B64` (`base64 -w0 simfone-release.jks`), `SIMFONE_KEYSTORE_PASSWORD`,
   `SIMFONE_KEY_ALIAS`, `SIMFONE_KEY_PASSWORD`, `SIMFONE_REQUEST_SIGNATURE`,
   `SIMFONE_LIBRARY_API_KEY`, optional `SIMFONE_MANIFEST_PUBKEY`, `SIMFONE_MANIFEST_URL`.
 - Without the keystore secret, pre-releases are signed with a throwaway key and marked
   **NOT FOR FLEET** (a phone running one can't be updated by a release-signed build);
-  stable tags fail.
+  normal releases fail.
 
 ### hmdm-lib (companion apps)
 
@@ -139,6 +138,7 @@ Configuration → **Application settings** for package `com.simfone.mdm`:
 | `unlocked_packages` | CSV | never hidden/suspended (wins over the lists above) |
 | `protected_packages` | CSV | `setUninstallBlocked` – e.g. launcher, KyCall, dpadsms |
 | `companion_packages` | CSV | also receive the `RELEASED`/`PARKED` broadcast |
+| `settings_icon` | `show`/`hide` | "SimFone Setup" app icon (default `show`) |
 | `auto_time_required` | `true`/`false` | `setAutoTimeRequired` (default `true`) |
 | `apn_override` | JSON | Android 9+ APN override, e.g. `{"name":"SimFone","apn":"simfone.apn","mccmnc":"310260","type":"default,supl"}`; `0` removes it |
 | `intentional_relax` | `true` | allows a config that drops ≥50 % of restrictions/locked apps at once |
@@ -162,7 +162,10 @@ Upstream `permissiveMode`, `exitKiosk` and `adminPanel` pushes are ignored.
 
 ---
 
-## Hidden settings (`*#*#7463#*#*`)
+## Setup screen (app icon "SimFone Setup", or `*#*#7463#*#*`)
+
+The **SimFone Setup** icon in the app list opens the same screen as the dialer code. Hide the icon
+per configuration with `settings_icon=hide`.
 
 The dialer must broadcast `android.provider.Telephony.SECRET_CODE` (KyCall must implement this;
 check the Kyocera stock dialer). Fallback:

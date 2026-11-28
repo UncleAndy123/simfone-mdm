@@ -34,6 +34,7 @@
     </string-array>
 
     <!-- SimFone -->
+    <string name="setup_icon_label">SimFone Setup</string>
     <string name="released_title">SimFone MDM removed</string>
     <string name="released_text">This phone is no longer managed. Tap to uninstall SimFone MDM.</string>
     <string name="settings_title">SimFone MDM</string>
